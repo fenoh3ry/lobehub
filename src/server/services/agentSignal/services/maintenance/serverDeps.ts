@@ -561,7 +561,8 @@ export const createServerProcedurePolicyOptions = ({
         policyStateStore: redisPolicyStateStore,
         ttlSeconds: 7 * 24 * 60 * 60,
       }),
-      getWindowStart: ({ source }) => new Date(source.timestamp).toISOString(),
+      getWindowStart: ({ decision, source }) =>
+        decision.windowStart ?? new Date(source.timestamp).toISOString(),
       service: createSelfReflectionService({
         canRequestSelfReflection: async (input) => {
           if (input.userId !== userId) return false;
@@ -678,12 +679,13 @@ export const createServerNightlyReviewPolicyDeps = ({
       if (!(await reviewContextModel.canAgentRunSelfIteration(input.agentId))) return false;
 
       const targets = await nightlyReviewModel.listActiveAgentTargets(userId, {
+        agentId: input.agentId,
         limit: 1,
         windowEnd: new Date(input.reviewWindowEnd),
         windowStart: new Date(input.reviewWindowStart),
       });
 
-      return targets.some((target) => target.agentId === input.agentId);
+      return targets.length > 0;
     },
     collectContext: (input) => collector.collectNightlyReviewContext(input),
     executePlan: (plan) => executor.execute(plan),

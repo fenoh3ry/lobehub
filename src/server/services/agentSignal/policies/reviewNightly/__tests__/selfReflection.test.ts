@@ -108,7 +108,7 @@ const reflectionPlan = {
       idempotencyKey: `${reflectionSourceId}:write_memory:memory:User prefers scoped task follow-up.`,
       operation: {
         domain: 'memory',
-        input: { content: 'User prefers scoped task follow-up.' },
+        input: { content: 'User prefers scoped task follow-up.', userId: 'user-1' },
         operation: 'write',
       },
       rationale: 'The task exposed a durable preference.',
@@ -248,7 +248,11 @@ describe('self-reflection source handler', () => {
           idempotencyKey: `${reflectionSourceId}:consolidate_skill:skill:skill-a`,
           operation: {
             domain: 'skill',
-            input: { sourceSkillIds: ['skill-a', 'skill-b'] },
+            input: {
+              canonicalSkillDocumentId: 'skill-a',
+              sourceSkillIds: ['skill-a', 'skill-b'],
+              userId: 'user-1',
+            },
             operation: 'consolidate',
           },
           rationale: 'Two managed skills overlap.',

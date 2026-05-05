@@ -1478,7 +1478,7 @@ const runCreateWorkflow = async (
         };
       },
     });
-    const created = await skillMaintenanceService.createSkill({
+    await skillMaintenanceService.createSkill({
       evidenceRefs: [],
       idempotencyKey: `same-turn-skill:create:${authored.name}`,
       input: {

@@ -297,14 +297,23 @@ describe('selfReflectionAccumulator', () => {
         ttlSeconds: 60,
       });
 
-    await createAccumulator().record(createInput('tool_failed', 'source-1'));
-    const decision = await createAccumulator().record(createInput('tool_failed', 'source-2'));
+    await createAccumulator().record(
+      createInput('tool_failed', 'source-1', {
+        eventTimestamp: '2026-05-04T14:00:00.000Z',
+      }),
+    );
+    const decision = await createAccumulator().record(
+      createInput('tool_failed', 'source-2', {
+        eventTimestamp: '2026-05-04T14:05:00.000Z',
+      }),
+    );
 
     expect(decision).toMatchObject({
       reason: 'failed_tool_count',
       scopeId: 'task-1',
       scopeType: 'task',
       shouldRequest: true,
+      windowStart: '2026-05-04T14:00:00.000Z',
     });
   });
 

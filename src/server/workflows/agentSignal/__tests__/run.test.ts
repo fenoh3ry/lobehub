@@ -5,7 +5,10 @@ import { agents, messages, threads, topics, users } from '@lobechat/database/sch
 import { getTestDB } from '@lobechat/database/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { SelfReflectionReviewContext } from '@/server/services/agentSignal/policies/reviewNightly/selfReflection';
+import { createProcedurePolicyOptions as createProcedurePolicyOptionsFixture } from '@/server/services/agentSignal/procedure';
 import { MaintenanceReviewScope, ReviewRunStatus } from '@/server/services/agentSignal/services';
+import type { AgentSignalPolicyStateStore } from '@/server/services/agentSignal/store/types';
 import type { RunAgentSignalWorkflowDeps } from '@/server/workflows/agentSignal/run';
 import { runAgentSignalWorkflow } from '@/server/workflows/agentSignal/run';
 import { uuid } from '@/utils/uuid';
@@ -18,6 +21,17 @@ const createWorkflowContext = <TPayload>(requestPayload: TPayload) => {
   return {
     requestPayload,
     run: async <TRunResult>(_stepId: string, handler: () => Promise<TRunResult>) => handler(),
+  };
+};
+
+const createPolicyStateStore = (): AgentSignalPolicyStateStore => {
+  const state = new Map<string, Record<string, string>>();
+
+  return {
+    readPolicyState: async (policyId, scopeKey) => state.get(`${policyId}:${scopeKey}`),
+    writePolicyState: async (policyId, scopeKey, data) => {
+      state.set(`${policyId}:${scopeKey}`, { ...state.get(`${policyId}:${scopeKey}`), ...data });
+    },
   };
 };
 
@@ -518,17 +532,18 @@ describe('runAgentSignalWorkflow', () => {
     const userId = `eval_${uuid()}`;
     const agentId = `agent_${uuid()}`;
     const sourceId = `self-reflection:${userId}:${agentId}:topic:topic-1:failed_tool_count:2026-05-04T14:30:00.000Z`;
+    const selfReflectionContext: SelfReflectionReviewContext = {
+      agentId,
+      scopeId: 'topic-1',
+      scopeType: 'topic',
+      userId,
+      windowEnd: '2026-05-04T14:30:00.000Z',
+      windowStart: '2026-05-04T14:00:00.000Z',
+    };
     const selfReflectionPolicyOptions = {
       acquireReviewGuard: vi.fn(async () => true),
       canRunReview: vi.fn(async () => true),
-      collectContext: vi.fn(async () => ({
-        agentId,
-        scopeId: 'topic-1',
-        scopeType: 'topic',
-        userId,
-        windowEnd: '2026-05-04T14:30:00.000Z',
-        windowStart: '2026-05-04T14:00:00.000Z',
-      })),
+      collectContext: vi.fn(async () => selfReflectionContext),
       executePlan: vi.fn(async () => ({ actions: [], status: ReviewRunStatus.Completed })),
       planReviewOutput: vi.fn(() => ({
         actions: [],
@@ -665,15 +680,10 @@ describe('runAgentSignalWorkflow', () => {
     const db = await getTestDB();
     const userId = `eval_${uuid()}`;
     const agentId = `agent_${uuid()}`;
-    const procedurePolicyOptions = {
-      accumulator: { appendRecord: vi.fn(async () => {}) },
-      markerReader: { shouldSuppress: vi.fn(async () => false) },
-      markerStore: { write: vi.fn(async () => {}) },
-      now: () => Date.now(),
-      receiptStore: { append: vi.fn(async () => {}) },
-      recordStore: { write: vi.fn(async () => {}) },
+    const procedurePolicyOptions = createProcedurePolicyOptionsFixture({
+      policyStateStore: createPolicyStateStore(),
       ttlSeconds: 60,
-    };
+    });
     const createProcedurePolicyOptions: NonNullable<
       RunAgentSignalWorkflowDeps['createProcedurePolicyOptions']
     > = vi.fn(() => procedurePolicyOptions);

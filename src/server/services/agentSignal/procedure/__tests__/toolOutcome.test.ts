@@ -218,7 +218,7 @@ describe('tool outcome procedure handler', () => {
       recordStore: { write: async () => {} },
       selfReflection: {
         accumulator: createSelfReflectionAccumulator(),
-        getWindowStart: () => '2026-05-04T00:00:00.000Z',
+        getWindowStart: ({ decision }) => decision.windowStart ?? 'missing-window-start',
         service: { requestSelfReflection },
       },
       ttlSeconds: 3600,
@@ -262,7 +262,7 @@ describe('tool outcome procedure handler', () => {
       topicId: 'topic-1',
       userId: 'user-1',
       windowEnd: '1970-01-01T00:00:03.000Z',
-      windowStart: '2026-05-04T00:00:00.000Z',
+      windowStart: '1970-01-01T00:00:02.000Z',
     });
   });
 

@@ -3,90 +3,44 @@ import { and, count, desc, eq, gte, isNull, lte, or, sql } from 'drizzle-orm';
 import { agents, messagePlugins, messages, topics, userMemories } from '../../schemas';
 import type { LobeChatDatabase } from '../../type';
 
-/**
- * Normalizes database aggregate timestamps.
- *
- * Before:
- * - "2026-05-03 14:00:00+00"
- *
- * After:
- * - Date("2026-05-03T14:00:00.000Z")
- */
 const parseAggregateTimestamp = (value: Date | string) =>
   value instanceof Date ? value : new Date(value);
 
-/** Query options for bounded Agent Signal topic activity. */
 export interface ListAgentSignalTopicActivityOptions {
-  /** Agent whose topic activity is being reviewed. */
   agentId: string;
-  /** Maximum rows to return. */
   limit: number;
-  /** Review window end in UTC. */
   windowEnd: Date;
-  /** Review window start in UTC. */
   windowStart: Date;
 }
 
-/** Query options for scoped Agent Signal self-reflection topic activity. */
 export interface ListAgentSignalSelfReflectionTopicOptions {
-  /** Agent whose scoped activity is being reviewed. */
   agentId: string;
-  /** Topic id selected by the source scope. */
   topicId: string;
-  /** Review window end in UTC. */
   windowEnd: Date;
-  /** Review window start in UTC. */
   windowStart: Date;
 }
 
-/** Query options for relevant memory summaries used by review context. */
 export interface ListAgentSignalRelevantMemoriesOptions {
-  /** Maximum rows to return. */
   limit: number;
 }
 
-/** Bounded topic activity row used by Agent Signal reviewers. */
 export interface AgentSignalTopicActivityRow {
-  /** Failed tool-call count in the row scope. */
   failedToolCount: number;
-  /** Failed assistant/message count in the row scope. */
   failureCount: number;
-  /** Last activity timestamp in the row scope. */
   lastActivityAt: Date | null;
-  /** Total message count in the row scope. */
   messageCount: number;
-  /** Digest-safe topic summary text. */
   summary: string;
-  /** Topic title. */
   title: string | null;
-  /** Stable topic id. */
   topicId: string | null;
 }
 
-/** Relevant memory row used by Agent Signal review context. */
 export interface AgentSignalRelevantMemoryRow {
-  /** Digest-safe memory content. */
   content: string;
-  /** Stable memory id. */
   id: string;
-  /** Last memory update timestamp. */
   updatedAt: Date;
 }
 
-/**
- * Queries database-backed context for Agent Signal self-review policies.
- *
- * Use when:
- * - Server maintenance policy deps need reviewer context from persisted chat data
- * - Gate checks need agent ownership and self-iteration opt-in verification
- *
- * Expects:
- * - `userId` scopes every query to one owner
- * - Callers pass UTC `Date` windows derived from source-event payloads
- *
- * Returns:
- * - Digest-safe rows without raw message transcripts
- */
+/** Database-backed context queries for Agent Signal self-review policies. */
 export class AgentSignalReviewContextModel {
   private readonly db: LobeChatDatabase;
   private readonly userId: string;
@@ -96,18 +50,7 @@ export class AgentSignalReviewContextModel {
     this.userId = userId;
   }
 
-  /**
-   * Checks whether an agent can run self-iteration maintenance.
-   *
-   * Use when:
-   * - Source handlers re-check ownership and agent-level opt-in before reviewer work
-   *
-   * Expects:
-   * - User-level feature gates are checked by the service layer
-   *
-   * Returns:
-   * - `true` only for owned, non-virtual, self-iteration-enabled agents
-   */
+  /** Checks agent ownership, virtual status, and self-iteration opt-in. */
   canAgentRunSelfIteration = async (agentId: string) => {
     const [agent] = await this.db
       .select({ id: agents.id })
@@ -125,18 +68,7 @@ export class AgentSignalReviewContextModel {
     return Boolean(agent);
   };
 
-  /**
-   * Lists recent relevant memory summaries for review context.
-   *
-   * Use when:
-   * - Nightly reviewers need compact existing memory context for dedupe and refinement hints
-   *
-   * Expects:
-   * - `limit` is already bounded by the service layer
-   *
-   * Returns:
-   * - Memory rows ordered by most recently updated first
-   */
+  /** Lists recent memory summaries for review context. */
   listRelevantMemories = (options: ListAgentSignalRelevantMemoriesOptions) => {
     return this.db
       .select({
@@ -150,18 +82,7 @@ export class AgentSignalReviewContextModel {
       .limit(options.limit);
   };
 
-  /**
-   * Lists bounded topic activity for nightly review context.
-   *
-   * Use when:
-   * - Nightly reviewers need high-signal topic digests without raw transcripts
-   *
-   * Expects:
-   * - Message `agentId` wins when present; topic `agentId` covers legacy messages
-   *
-   * Returns:
-   * - Topic rows ordered by latest message activity
-   */
+  /** Lists bounded topic activity for nightly review context. */
   listTopicActivity = (options: ListAgentSignalTopicActivityOptions) => {
     const effectiveAgentId = sql<string>`COALESCE(${messages.agentId}, ${topics.agentId})`;
 
@@ -200,18 +121,7 @@ export class AgentSignalReviewContextModel {
       .limit(options.limit);
   };
 
-  /**
-   * Lists scoped topic activity for self-reflection review context.
-   *
-   * Use when:
-   * - Fast-loop self-reflection requests need bounded evidence for one topic scope
-   *
-   * Expects:
-   * - `topicId` belongs to the same user and review window
-   *
-   * Returns:
-   * - At most one topic digest row for the requested scope
-   */
+  /** Lists scoped topic activity for self-reflection review context. */
   listSelfReflectionTopicActivity = (options: ListAgentSignalSelfReflectionTopicOptions) => {
     return this.db
       .select({

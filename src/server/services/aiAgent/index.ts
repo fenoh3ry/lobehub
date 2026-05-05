@@ -951,9 +951,13 @@ export class AiAgentService {
         klavisManifests.length,
       );
 
+      const agentSelfIterationEnabled = agentConfig.chatConfig?.selfIteration?.enabled === true;
+      const shouldCheckUserSelfIterationGate =
+        agentSelfIterationEnabled && !params.disableSelfIterationIntentTool;
       if (
+        shouldCheckUserSelfIterationGate &&
         shouldExposeSelfIterationIntentTool({
-          agentSelfIterationEnabled: agentConfig.chatConfig?.selfIteration?.enabled === true,
+          agentSelfIterationEnabled,
           disableSelfIterationIntentTool: params.disableSelfIterationIntentTool,
           featureUserEnabled: await isAgentSignalEnabledForUser(this.db, this.userId),
         })

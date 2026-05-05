@@ -58,6 +58,8 @@ export interface AgentSignalNightlyReviewUserCandidate {
 
 /** Options for listing active agent review targets for one user and one review window. */
 export interface ListAgentSignalNightlyReviewTargetsOptions {
+  /** Optional single-agent filter for handler-side source validation. */
+  agentId?: string;
   /** Maximum active agents to return. */
   limit?: number;
   /** Review window end in UTC. */
@@ -171,6 +173,7 @@ export class AgentSignalNightlyReviewModel {
     options: ListAgentSignalNightlyReviewTargetsOptions,
   ) => {
     const effectiveAgentId = sql<string>`COALESCE(${messages.agentId}, ${topics.agentId})`;
+    const agentFilter = options.agentId ? eq(agents.id, options.agentId) : undefined;
 
     const query = this.db
       .select({
@@ -197,6 +200,7 @@ export class AgentSignalNightlyReviewModel {
       .where(
         and(
           eq(messages.userId, userId),
+          agentFilter,
           gte(messages.createdAt, options.windowStart),
           lte(messages.createdAt, options.windowEnd),
           or(eq(agents.virtual, false), isNull(agents.virtual)),

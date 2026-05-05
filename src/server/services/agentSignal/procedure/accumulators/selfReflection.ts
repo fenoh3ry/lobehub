@@ -4,9 +4,6 @@ type SelfReflectionScopeType = 'operation' | 'task' | 'topic';
 
 const SELF_REFLECTION_ACCUMULATOR_POLICY_ID = 'self-reflection-accumulator';
 
-/**
- * Weak-signal event families that can update self-reflection counters.
- */
 export type SelfReflectionAccumulatorEventType =
   | 'correction'
   | 'execution_failed'
@@ -17,9 +14,6 @@ export type SelfReflectionAccumulatorEventType =
   | 'tool_completed'
   | 'tool_failed';
 
-/**
- * Stable threshold reason emitted when a scoped weak-signal counter crosses.
- */
 export type SelfReflectionRequestReason =
   | 'execution_failed'
   | 'failed_tool_count'
@@ -29,125 +23,63 @@ export type SelfReflectionRequestReason =
   | 'tool_call_count'
   | 'user_correction_count';
 
-/**
- * Scope resolved from a runtime, tool, or receipt signal.
- */
 export interface SelfReflectionAccumulatorScope {
-  /** Stable scope id selected from task, operation, or topic ids. */
   scopeId: string;
-  /** Scope family used by downstream source builders. */
   scopeType: SelfReflectionScopeType;
 }
 
-/**
- * Threshold values used by the in-memory self-reflection accumulator.
- */
 export interface SelfReflectionAccumulatorThresholds {
-  /** User correction count that suggests the agent is being steered repeatedly. */
   correctionCount: number;
-  /** Failed tool count that suggests the agent may be stuck. */
   failedToolCount: number;
-  /** Receipt count that suggests maintenance actions are piling up in one scope. */
   receiptCount: number;
-  /** Runtime step count that suggests the execution is becoming long. */
   runtimeStepCount: number;
-  /** Per-tool failure count that suggests repeated failure with one tool. */
   sameToolFailureCount: number;
-  /** Total tool activity count that suggests the loop is long enough to review. */
   toolCallCount: number;
 }
 
-/**
- * Weak-signal counters retained for one scoped self-reflection window.
- */
 export interface SelfReflectionAccumulatorCounters {
-  /** Number of user correction signals observed in the scope. */
   correctionCount: number;
-  /** Number of failed tool calls observed in the scope. */
   failedToolCount: number;
-  /** Number of negative feedback signals observed in the scope. */
   negativeFeedbackCount: number;
-  /** Number of receipt signals observed in the scope. */
   receiptCount: number;
-  /** Number of runtime step signals observed in the scope. */
   runtimeStepCount: number;
-  /** Maximum failed-call count for any one tool name in the scope. */
   sameToolFailureCount: number;
-  /** Number of tool activity signals observed in the scope. */
   toolCallCount: number;
 }
 
-/**
- * Signal input recorded into the in-memory self-reflection accumulator.
- */
 export interface SelfReflectionAccumulatorRecordInput {
-  /** Agent associated with this weak signal. */
   agentId: string;
-  /** Weak-signal event family. */
+  eventTimestamp?: string;
   eventType: SelfReflectionAccumulatorEventType;
-  /** Runtime operation id, used when task id is absent. */
   operationId?: string;
-  /** Source, receipt, runtime step, or tool event id used for traceability. */
   sourceId: string;
-  /** Task id, preferred over operation and topic ids for scoping. */
   taskId?: string;
-  /** Tool name for per-tool failure accumulation. */
   toolName?: string;
-  /** Topic id, used as the broadest fallback scope. */
   topicId?: string;
-  /** User associated with this weak signal. */
   userId: string;
 }
 
-/**
- * Decision returned after recording one weak signal.
- */
 export interface SelfReflectionAccumulatorDecision {
-  /** Current counters for the resolved scope after this record is applied. */
   counters?: SelfReflectionAccumulatorCounters;
-  /** Threshold reason that crossed on this record. */
   reason?: SelfReflectionRequestReason;
-  /** Scope id selected from task, operation, or topic ids. */
   scopeId?: string;
-  /** Scope family selected for the decision. */
   scopeType?: SelfReflectionScopeType;
-  /** Whether downstream code should enqueue a self-reflection request. */
   shouldRequest: boolean;
+  windowStart?: string;
 }
 
 interface SelfReflectionAccumulatorState {
   counters: SelfReflectionAccumulatorCounters;
   emittedReasons: Set<SelfReflectionRequestReason>;
   toolFailures: Map<string, number>;
+  windowStart?: string;
 }
 
-/**
- * In-memory accumulator instance for self-reflection weak signals.
- */
 export interface SelfReflectionAccumulator {
-  /**
-   * Records one weak signal and returns whether a self-reflection request should be emitted.
-   *
-   * Use when:
-   * - Runtime or tool events need deterministic threshold decisions
-   * - Tests and evals need pure in-memory behavior without stores or queues
-   *
-   * Expects:
-   * - At least one of `taskId`, `operationId`, or `topicId` is present for request decisions
-   *
-   * Returns:
-   * - A decision object with threshold reason and scope only when a threshold crosses
-   */
   record: (input: SelfReflectionAccumulatorRecordInput) => SelfReflectionAccumulatorDecision;
 }
 
-/**
- * Async-compatible accumulator boundary used by workflow-backed procedure handlers.
- */
 export interface AsyncSelfReflectionAccumulator {
-  /**
-   * Records one weak signal and returns whether a self-reflection request should be emitted.
-   */
   record: (
     input: SelfReflectionAccumulatorRecordInput,
   ) => Promise<SelfReflectionAccumulatorDecision> | SelfReflectionAccumulatorDecision;
@@ -196,6 +128,13 @@ const createState = (): SelfReflectionAccumulatorState => ({
   emittedReasons: new Set<SelfReflectionRequestReason>(),
   toolFailures: new Map<string, number>(),
 });
+
+const chooseEarlierTimestamp = (previous: string | undefined, next: string | undefined) => {
+  if (!next) return previous;
+  if (!previous) return next;
+
+  return next < previous ? next : previous;
+};
 
 const serializeCounters = (counters: SelfReflectionAccumulatorCounters) => JSON.stringify(counters);
 
@@ -266,6 +205,7 @@ const createStateFromStoredFields = (
   counters: parseCounters(fields?.counters),
   emittedReasons: parseReasons(fields?.emittedReasons),
   toolFailures: parseToolFailures(fields?.toolFailures),
+  windowStart: fields?.windowStart,
 });
 
 const createDecisionAfterRecord = (
@@ -275,6 +215,7 @@ const createDecisionAfterRecord = (
 ): SelfReflectionAccumulatorDecision => {
   const previousCounters = copyCounters(state.counters);
 
+  state.windowStart = chooseEarlierTimestamp(state.windowStart, input.eventTimestamp);
   incrementCounters(state, input);
 
   const newlyCrossedReasons = getNewlyCrossedReasons(
@@ -300,6 +241,7 @@ const createDecisionAfterRecord = (
     scopeId: scope.scopeId,
     scopeType: scope.scopeType,
     shouldRequest: true,
+    windowStart: state.windowStart,
   };
 };
 
@@ -417,19 +359,7 @@ const getNewlyCrossedReasons = (
   return reasons;
 };
 
-/**
- * Creates a pure weak-signal accumulator for self-reflection request decisions.
- *
- * Use when:
- * - Runtime, tool, feedback, or receipt events need fast-loop self-reflection thresholds
- * - Callers need deterministic in-memory behavior without DB writes, queues, or source emission
- *
- * Expects:
- * - One accumulator instance is scoped to a runtime lifetime or test fixture
- *
- * Returns:
- * - An accumulator with a `record` method that emits only when a threshold crosses once per scope
- */
+/** Creates an in-memory weak-signal accumulator for one runtime or test lifecycle. */
 export const createSelfReflectionAccumulator = (): SelfReflectionAccumulator => {
   const scopes = new Map<string, SelfReflectionAccumulatorState>();
 
@@ -448,20 +378,7 @@ export const createSelfReflectionAccumulator = (): SelfReflectionAccumulator => 
   };
 };
 
-/**
- * Creates a policy-state-backed accumulator for self-reflection request decisions.
- *
- * Use when:
- * - Workflow events are processed one source event at a time
- * - Count-based self-reflection triggers must persist across workflow invocations
- *
- * Expects:
- * - The provided policy-state store preserves fields for the configured TTL
- * - Store writes merge hash fields for one policy/scope key
- *
- * Returns:
- * - An accumulator that stores counters, emitted reasons, and per-tool failure counts durably
- */
+/** Creates a durable weak-signal accumulator for workflow events processed one at a time. */
 export const createDurableSelfReflectionAccumulator = (input: {
   policyStateStore: AgentSignalPolicyStateStore;
   ttlSeconds: number;
@@ -486,6 +403,7 @@ export const createDurableSelfReflectionAccumulator = (input: {
         lastSourceId: recordInput.sourceId,
         toolFailures: serializeToolFailures(state.toolFailures),
         version: '1',
+        ...(state.windowStart ? { windowStart: state.windowStart } : {}),
       },
       input.ttlSeconds,
     );

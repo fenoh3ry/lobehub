@@ -280,6 +280,26 @@ describe('AgentSignalNightlyReviewModel', () => {
       expect(result.map((item) => item.agentId)).not.toContain(disabledAgent.id);
       expect(result.map((item) => item.agentId)).not.toContain(virtualAgent.id);
       expect(result.map((item) => item.agentId)).not.toContain(otherUserAgent.id);
+
+      const targetedResult = await model.listActiveAgentTargets(enabledUserId, {
+        agentId: activeAgent.id,
+        limit: 1,
+        windowEnd: new Date('2026-05-03T23:59:59.999Z'),
+        windowStart: new Date('2026-05-03T00:00:00.000Z'),
+      });
+
+      expect(targetedResult).toEqual([
+        {
+          agentId: activeAgent.id,
+          failedToolCallCount: 1,
+          firstActivityAt: new Date('2026-05-03T12:00:00.000Z'),
+          lastActivityAt: new Date('2026-05-03T13:00:00.000Z'),
+          messageCount: 2,
+          timezone: 'America/New_York',
+          title: 'Active agent',
+          topicCount: 1,
+        },
+      ]);
     });
   });
 });

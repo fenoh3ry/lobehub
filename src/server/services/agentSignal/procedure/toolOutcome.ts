@@ -158,9 +158,16 @@ const handleSelfReflectionToolOutcome = async (input: {
     const status = input.payload.outcome?.status;
     if (!userId || !agentId || !status) return;
 
+    const windowEnd = resolveSelfReflectionWindowEnd({
+      fallbackTimestamp: input.fallbackTimestamp,
+      sourceTimestamp: input.source.timestamp,
+    });
+    if (!windowEnd) return;
+
     const decision = await selfReflection.accumulator.record({
       agentId,
       eventType: resolveSelfReflectionEventType(status),
+      eventTimestamp: windowEnd,
       operationId: input.payload.operationId,
       sourceId: input.source.sourceId,
       taskId: input.payload.taskId ?? input.source.scope?.taskId,
@@ -172,12 +179,6 @@ const handleSelfReflectionToolOutcome = async (input: {
     if (!decision.shouldRequest || !decision.reason || !decision.scopeId || !decision.scopeType) {
       return;
     }
-
-    const windowEnd = resolveSelfReflectionWindowEnd({
-      fallbackTimestamp: input.fallbackTimestamp,
-      sourceTimestamp: input.source.timestamp,
-    });
-    if (!windowEnd) return;
 
     void selfReflection.service
       .requestSelfReflection({

@@ -23,7 +23,7 @@ const nightlyPlan = {
       idempotencyKey: 'nightly-review:user-1:agent-1:2026-05-04:write_memory:memory:concise',
       operation: {
         domain: 'memory',
-        input: { content: 'User prefers concise summaries.' },
+        input: { content: 'User prefers concise summaries.', userId: 'user-1' },
         operation: 'write',
       },
       rationale: 'Stable preference found in the review window.',
