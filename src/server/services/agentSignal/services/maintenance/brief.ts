@@ -46,12 +46,6 @@ export type MaintenanceBriefProjection = Omit<NewBrief, 'id' | 'userId'> & {
   trigger: typeof NIGHTLY_REVIEW_BRIEF_TRIGGER;
 };
 
-/** Persistence boundary for Agent Signal maintenance Daily Briefs. */
-export interface MaintenanceBriefWriterDependencies {
-  /** Creates one Daily Brief payload for the owning user. */
-  createBrief: (brief: MaintenanceBriefProjection) => Promise<{ id?: string } | void>;
-}
-
 /** Input used to project one nightly maintenance result to a Daily Brief payload. */
 export interface ProjectNightlyReviewBriefInput {
   /** Agent reviewed by the nightly maintenance run. */
@@ -272,27 +266,10 @@ export const createBriefMaintenanceService = () => ({
 });
 
 /**
- * Creates a writer for Agent Signal maintenance Daily Brief payloads.
- *
- * Use when:
- * - A nightly review source handler needs to persist an eligible projected brief
- * - Tests need to inject a persistence boundary without a database
- *
- * Expects:
- * - The input brief has already been projected by {@link createBriefMaintenanceService}
- *
- * Returns:
- * - A writer that delegates to the injected create boundary
- */
-export const createMaintenanceBriefWriter = (deps: MaintenanceBriefWriterDependencies) => ({
-  writeDailyBrief: (brief: MaintenanceBriefProjection) => deps.createBrief(brief),
-});
-
-/**
  * Creates the server Daily Brief writer backed by {@link BriefModel}.
  *
  * Use when:
- * - Agent Signal nightly review policy dependencies are installed in the server runtime
+ * - Agent Signal nightly review policy options are installed in the server runtime
  * - Eligible nightly outcomes must become real Daily Brief rows
  *
  * Expects:
@@ -304,7 +281,7 @@ export const createMaintenanceBriefWriter = (deps: MaintenanceBriefWriterDepende
 export const createServerMaintenanceBriefWriter = (db: LobeChatDatabase, userId: string) => {
   const model = new BriefModel(db, userId);
 
-  return createMaintenanceBriefWriter({
-    createBrief: (brief) => model.create(brief),
-  });
+  return {
+    writeDailyBrief: (brief: MaintenanceBriefProjection) => model.create(brief),
+  };
 };

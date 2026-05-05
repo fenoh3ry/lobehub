@@ -18,15 +18,15 @@ import {
   ReviewRunStatus,
 } from './types';
 
-/** Dependencies used by the maintenance executor. */
-export interface MaintenanceExecutorDependencies {
-  /** Memory domain service used for auto-apply memory operations. */
-  memoryService: {
+/** Operation handlers used by the maintenance executor for approved mutations. */
+export interface MaintenanceOperationHandlers {
+  /** Handles auto-apply memory operations. */
+  memory: {
     /** Writes a memory maintenance request. */
     writeMemory: (request: MemoryMaintenanceWriteRequest) => Promise<MemoryMaintenanceWriteResult>;
   };
-  /** Skill domain service used for auto-apply skill operations. */
-  skillService: Partial<{
+  /** Handles auto-apply skill operations. */
+  skill: Partial<{
     /** Creates a managed skill. */
     createSkill: (request: SkillMaintenanceCreateRequest) => Promise<SkillMaintenanceResult>;
     /** Refines a managed skill. */
@@ -57,11 +57,11 @@ const toFailedResult = (action: MaintenanceActionPlan, error: unknown) => ({
 });
 
 const executeMemoryAction = async (
-  dependencies: MaintenanceExecutorDependencies,
+  handlers: MaintenanceOperationHandlers,
   action: MaintenanceActionPlan,
   operation: Extract<MaintenanceDomainOperation, { domain: 'memory' }>,
 ) => {
-  const result = await dependencies.memoryService.writeMemory({
+  const result = await handlers.memory.writeMemory({
     evidenceRefs: action.evidenceRefs,
     idempotencyKey: action.idempotencyKey,
     input: operation.input,
@@ -76,12 +76,12 @@ const executeMemoryAction = async (
 };
 
 const executeSkillAction = async (
-  dependencies: MaintenanceExecutorDependencies,
+  handlers: MaintenanceOperationHandlers,
   action: MaintenanceActionPlan,
   operation: Extract<MaintenanceDomainOperation, { domain: 'skill' }>,
 ) => {
-  if (operation.operation === 'create' && dependencies.skillService.createSkill) {
-    const result = await dependencies.skillService.createSkill({
+  if (operation.operation === 'create' && handlers.skill.createSkill) {
+    const result = await handlers.skill.createSkill({
       evidenceRefs: action.evidenceRefs,
       idempotencyKey: action.idempotencyKey,
       input: operation.input,
@@ -95,8 +95,8 @@ const executeSkillAction = async (
     };
   }
 
-  if (operation.operation === 'refine' && dependencies.skillService.refineSkill) {
-    const result = await dependencies.skillService.refineSkill({
+  if (operation.operation === 'refine' && handlers.skill.refineSkill) {
+    const result = await handlers.skill.refineSkill({
       evidenceRefs: action.evidenceRefs,
       idempotencyKey: action.idempotencyKey,
       input: operation.input,
@@ -110,8 +110,8 @@ const executeSkillAction = async (
     };
   }
 
-  if (operation.operation === 'consolidate' && dependencies.skillService.consolidateSkill) {
-    const result = await dependencies.skillService.consolidateSkill({
+  if (operation.operation === 'consolidate' && handlers.skill.consolidateSkill) {
+    const result = await handlers.skill.consolidateSkill({
       evidenceRefs: action.evidenceRefs,
       idempotencyKey: action.idempotencyKey,
       input: operation.input,
@@ -129,7 +129,7 @@ const executeSkillAction = async (
 };
 
 const executeAction = async (
-  dependencies: MaintenanceExecutorDependencies,
+  handlers: MaintenanceOperationHandlers,
   action: MaintenanceActionPlan,
 ) => {
   if (action.applyMode === MaintenanceApplyMode.Skip) {
@@ -152,10 +152,10 @@ const executeAction = async (
     const { operation } = action;
 
     if (operation.domain === 'memory') {
-      return await executeMemoryAction(dependencies, action, operation);
+      return await executeMemoryAction(handlers, action, operation);
     }
 
-    return await executeSkillAction(dependencies, action, operation);
+    return await executeSkillAction(handlers, action, operation);
   } catch (error) {
     return toFailedResult(action, error);
   }
@@ -185,14 +185,12 @@ const getReviewRunStatus = (actions: MaintenanceReviewRunResult['actions']) => {
  * Returns:
  * - An executor that records per-action results and continues after failures
  */
-export const createMaintenanceExecutorService = (
-  dependencies: MaintenanceExecutorDependencies,
-) => ({
+export const createMaintenanceExecutorService = (handlers: MaintenanceOperationHandlers) => ({
   execute: async (plan: MaintenancePlan): Promise<MaintenanceReviewRunResult> => {
     const actions = [];
 
     for (const action of plan.actions) {
-      actions.push(await executeAction(dependencies, action));
+      actions.push(await executeAction(handlers, action));
     }
 
     return {

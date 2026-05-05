@@ -42,8 +42,8 @@ describe('skillManagementService', () => {
         idempotencyKey: 'source:refine_skill:skill:builtin',
         input: {
           patch: 'Change builtin skill.',
-          readonly: true,
           skillDocumentId: 'builtin-skill',
+          targetReadonly: true,
           userId: 'user-1',
         },
       }),

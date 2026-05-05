@@ -33,11 +33,11 @@ import { executeAgentSignalSourceEvent } from '@/server/services/agentSignal/orc
 import { assembleFeedbackContext } from '@/server/services/agentSignal/policies/analyzeIntent/context/feedbackContextAssembler';
 import { createRedisRuntimeGuardBackend } from '@/server/services/agentSignal/runtime/backend/redisGuard';
 import {
-  createServerNightlyReviewPolicyDeps,
+  createServerNightlyReviewPolicyOptions,
   createServerProcedurePolicyOptions,
-  createServerSelfIterationIntentPolicyDeps,
-  createServerSelfReflectionPolicyDeps,
-} from '@/server/services/agentSignal/services/maintenance/serverDeps';
+  createServerSelfIterationIntentPolicyOptions,
+  createServerSelfReflectionPolicyOptions,
+} from '@/server/services/agentSignal/services/maintenance/serverRuntime';
 
 import type { AgentSignalWorkflowRunPayload } from './index';
 
@@ -62,11 +62,11 @@ export interface AgentSignalWorkflowContext<TPayload = AgentSignalWorkflowRunPay
 
 /** Dependencies for executing one Agent Signal workflow payload. */
 export interface RunAgentSignalWorkflowDeps {
-  createNightlyReviewPolicyOptions?: typeof createServerNightlyReviewPolicyDeps;
+  createNightlyReviewPolicyOptions?: typeof createServerNightlyReviewPolicyOptions;
   createProcedurePolicyOptions?: typeof createServerProcedurePolicyOptions;
   createRuntimeGuardBackend?: typeof createRedisRuntimeGuardBackend;
-  createSelfIterationIntentPolicyOptions?: typeof createServerSelfIterationIntentPolicyDeps;
-  createSelfReflectionPolicyOptions?: typeof createServerSelfReflectionPolicyDeps;
+  createSelfIterationIntentPolicyOptions?: typeof createServerSelfIterationIntentPolicyOptions;
+  createSelfReflectionPolicyOptions?: typeof createServerSelfReflectionPolicyOptions;
   createSnapshotStore?: () => ISnapshotStore | null;
   executeSourceEvent?: typeof executeAgentSignalSourceEvent;
   getDb?: typeof getServerDB;
@@ -428,12 +428,12 @@ export const runAgentSignalWorkflow = async (
           const getDb = deps.getDb ?? getServerDB;
           const executeSourceEvent = deps.executeSourceEvent ?? executeAgentSignalSourceEvent;
           const createNightlyReviewPolicyOptions =
-            deps.createNightlyReviewPolicyOptions ?? createServerNightlyReviewPolicyDeps;
+            deps.createNightlyReviewPolicyOptions ?? createServerNightlyReviewPolicyOptions;
           const createSelfReflectionPolicyOptions =
-            deps.createSelfReflectionPolicyOptions ?? createServerSelfReflectionPolicyDeps;
+            deps.createSelfReflectionPolicyOptions ?? createServerSelfReflectionPolicyOptions;
           const createSelfIterationIntentPolicyOptions =
             deps.createSelfIterationIntentPolicyOptions ??
-            createServerSelfIterationIntentPolicyDeps;
+            createServerSelfIterationIntentPolicyOptions;
           const createProcedurePolicyOptions =
             deps.createProcedurePolicyOptions ?? createServerProcedurePolicyOptions;
           const createGuardBackend =

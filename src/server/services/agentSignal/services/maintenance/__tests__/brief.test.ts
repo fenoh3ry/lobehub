@@ -3,11 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { BriefModel } from '@/database/models/brief';
 
-import {
-  createBriefMaintenanceService,
-  createMaintenanceBriefWriter,
-  createServerMaintenanceBriefWriter,
-} from '../brief';
+import { createBriefMaintenanceService, createServerMaintenanceBriefWriter } from '../brief';
 import { MaintenanceActionStatus, ReviewRunStatus } from '../types';
 
 describe('briefMaintenanceService', () => {
@@ -193,41 +189,6 @@ describe('briefMaintenanceService', () => {
         checkUserGate: vi.fn(async () => true),
       }),
     ).resolves.toEqual({ allowed: true });
-  });
-
-  /**
-   * @example
-   * The injected writer returns the created brief id.
-   */
-  it('writes projected briefs through the injected create boundary', async () => {
-    const createBrief = vi.fn(async () => ({ id: 'brief-1' }));
-    const writer = createMaintenanceBriefWriter({ createBrief });
-    const service = createBriefMaintenanceService();
-    const brief = service.projectNightlyReviewBrief({
-      agentId: 'agent-1',
-      localDate: '2026-05-04',
-      result: {
-        actions: [
-          {
-            idempotencyKey: 'source:write_memory:memory:concise',
-            receiptId: 'receipt-1',
-            status: MaintenanceActionStatus.Applied,
-            summary: 'Saved concise PR summary preference.',
-          },
-        ],
-        sourceId: 'nightly-review:user-1:agent-1:2026-05-04',
-        status: ReviewRunStatus.Completed,
-      },
-      reviewWindowEnd: '2026-05-04T14:30:00.000Z',
-      reviewWindowStart: '2026-05-03T16:00:00.000Z',
-      timezone: 'Asia/Shanghai',
-      userId: 'user-1',
-    });
-
-    if (!brief) throw new Error('Expected projected brief');
-
-    await expect(writer.writeDailyBrief(brief)).resolves.toEqual({ id: 'brief-1' });
-    expect(createBrief).toHaveBeenCalledWith(brief);
   });
 
   /**

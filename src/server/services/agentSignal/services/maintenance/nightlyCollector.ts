@@ -33,11 +33,11 @@ const RAW_ATTRIBUTE_KEYS = new Set([
 export type NightlyReviewHighSignalReason = (typeof HIGH_SIGNAL_REASON_ORDER)[number];
 
 /**
- * Input shared by nightly review collector dependency boundaries.
+ * Input shared by nightly review collector read adapters.
  *
  * Use when:
  * - Digest data sources need the same user-agent review window
- * - Tests need to assert simple dependency inputs without DB coupling
+ * - Tests need to assert simple read inputs without DB coupling
  *
  * Expects:
  * - Review windows are ISO strings from the source event payload
@@ -45,10 +45,10 @@ export type NightlyReviewHighSignalReason = (typeof HIGH_SIGNAL_REASON_ORDER)[nu
  * Returns:
  * - A bounded read request for one nightly review collection pass
  */
-export interface NightlyReviewDependencyInput {
+export interface NightlyReviewReadInput {
   /** Stable agent id being reviewed. */
   agentId: string;
-  /** Maximum summaries to return from the dependency. */
+  /** Maximum summaries to return from the read adapter. */
   limit?: number;
   /** Review window end as an ISO string. */
   reviewWindowEnd: string;
@@ -59,13 +59,13 @@ export interface NightlyReviewDependencyInput {
 }
 
 /** Input for listing digest-ish topic activity rows. */
-export interface ListTopicActivityInput extends NightlyReviewDependencyInput {}
+export interface ListTopicActivityInput extends NightlyReviewReadInput {}
 
 /** Input for listing managed skill summaries. */
-export interface ListManagedSkillsInput extends NightlyReviewDependencyInput {}
+export interface ListManagedSkillsInput extends NightlyReviewReadInput {}
 
 /** Input for listing relevant memory summaries. */
-export interface ListRelevantMemoriesInput extends NightlyReviewDependencyInput {}
+export interface ListRelevantMemoriesInput extends NightlyReviewReadInput {}
 
 /** Digest evidence counters and ids that can make a topic high-signal. */
 export interface NightlyReviewTopicSignalFields {
@@ -168,8 +168,8 @@ export interface NightlyReviewTopicDigest extends Omit<
   reviewScore: number;
 }
 
-/** Dependencies used by the pure nightly review collector service. */
-export interface NightlyReviewDependencies {
+/** Read adapters used by the pure nightly review collector service. */
+export interface NightlyReviewReadAdapters {
   /** Lists managed skill summaries for this agent and review window. */
   listManagedSkills: (input: ListManagedSkillsInput) => Promise<NightlyReviewManagedSkillSummary[]>;
   /** Lists relevant memory summaries for this agent and review window. */
@@ -393,28 +393,28 @@ const compareTopics = (left: NightlyReviewTopicDigest, right: NightlyReviewTopic
 };
 
 /**
- * Creates a pure nightly review collector service from injected digest boundaries.
+ * Creates a pure nightly review collector service from digest read adapters.
  *
  * Use when:
  * - Source handlers need bounded review context before reviewer/planner execution
  * - Tests need deterministic topic ranking without server data adapters
  *
  * Expects:
- * - Dependencies are read-only and do not enqueue sources or mutate memory/skills
+ * - Read adapters do not enqueue sources or mutate memory/skills
  * - Topic rows are digest-first summaries; raw transcript fields are discarded if present
  *
  * Returns:
  * - A collector service with one context assembly method
  */
 export const createNightlyReviewService = (
-  deps: NightlyReviewDependencies,
+  readAdapters: NightlyReviewReadAdapters,
 ): NightlyReviewService => {
   return {
     collectNightlyReviewContext: async (input) => {
       const maxTopics = input.maxTopics ?? DEFAULT_MAX_TOPICS;
       const maxManagedSkills = input.maxManagedSkills ?? DEFAULT_MAX_MANAGED_SKILLS;
       const maxRelevantMemories = input.maxRelevantMemories ?? DEFAULT_MAX_RELEVANT_MEMORIES;
-      const dependencyInput = {
+      const readInput = {
         agentId: input.agentId,
         reviewWindowEnd: input.reviewWindowEnd,
         reviewWindowStart: input.reviewWindowStart,
@@ -422,22 +422,22 @@ export const createNightlyReviewService = (
       };
 
       const [topicRows, managedSkills, relevantMemories] = await Promise.all([
-        deps.listTopicActivity({
-          ...dependencyInput,
+        readAdapters.listTopicActivity({
+          ...readInput,
           limit: input.topicFetchLimit ?? maxTopics * 3,
         }),
-        deps.listManagedSkills({
-          ...dependencyInput,
+        readAdapters.listManagedSkills({
+          ...readInput,
           limit: maxManagedSkills,
         }),
-        deps.listRelevantMemories({
-          ...dependencyInput,
+        readAdapters.listRelevantMemories({
+          ...readInput,
           limit: maxRelevantMemories,
         }),
       ]);
 
       return {
-        ...dependencyInput,
+        ...readInput,
         managedSkills: managedSkills.slice(0, maxManagedSkills),
         relevantMemories: relevantMemories.slice(0, maxRelevantMemories),
         topics: topicRows.map(normalizeTopic).sort(compareTopics).slice(0, maxTopics),

@@ -33,48 +33,6 @@ interface BriefTaskContext {
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0;
 
-const collectBriefReferenceIds = (briefs: BriefItem[]): BriefReferenceIds => {
-  return {
-    agentIds: briefs.map((brief) => brief.agentId).filter(isNonEmptyString),
-    taskIds: briefs.map((brief) => brief.taskId).filter(isNonEmptyString),
-  };
-};
-
-const createEmptyBriefTaskContext = (): BriefTaskContext => ({
-  agentIds: [],
-  agentIdsByTaskId: {},
-  statusByTaskId: {},
-});
-
-const createAgentAvatarMap = (agents: AgentAvatarInfo[]) => {
-  return Object.fromEntries(agents.map((agent) => [agent.id, agent]));
-};
-
-const uniqueStrings = (items: string[]) => [...new Set(items)];
-
-const resolveBriefAgentIds = (brief: BriefItem, taskAgentIdsMap: Record<string, string[]>) => {
-  return uniqueStrings([
-    ...(brief.agentId ? [brief.agentId] : []),
-    ...(brief.taskId ? (taskAgentIdsMap[brief.taskId] ?? []) : []),
-  ]);
-};
-
-const attachAgentsToBriefs = (
-  briefs: BriefItem[],
-  context: {
-    agentMap: Record<string, AgentAvatarInfo>;
-    taskContext: BriefTaskContext;
-  },
-): BriefWithAgents[] => {
-  return briefs.map((brief) => ({
-    ...brief,
-    agents: resolveBriefAgentIds(brief, context.taskContext.agentIdsByTaskId)
-      .map((id) => context.agentMap[id])
-      .filter((agent): agent is AgentAvatarInfo => Boolean(agent)),
-    taskStatus: brief.taskId ? (context.taskContext.statusByTaskId[brief.taskId] ?? null) : null,
-  }));
-};
-
 export class BriefService {
   private agentModel: AgentModel;
   private briefModel: BriefModel;
@@ -87,24 +45,55 @@ export class BriefService {
   }
 
   async enrichBriefsWithAgents(briefs: BriefItem[]): Promise<BriefWithAgents[]> {
-    const refs = collectBriefReferenceIds(briefs);
+    const refs = this.collectReferenceIds(briefs);
 
     if (refs.taskIds.length === 0 && refs.agentIds.length === 0) {
       return briefs.map((brief) => ({ ...brief, agents: [], taskStatus: null }));
     }
 
     const taskContext = await this.loadBriefTaskContext(refs.taskIds);
-    const agentIdsToLoad = uniqueStrings([...refs.agentIds, ...taskContext.agentIds]);
-    const agentMap =
+    const agentIdsToLoad = [...new Set([...refs.agentIds, ...taskContext.agentIds])];
+    const agentMap: Record<string, AgentAvatarInfo> =
       agentIdsToLoad.length > 0
-        ? createAgentAvatarMap(await this.agentModel.getAgentAvatarsByIds(agentIdsToLoad))
+        ? Object.fromEntries(
+            (await this.agentModel.getAgentAvatarsByIds(agentIdsToLoad)).map((agent) => [
+              agent.id,
+              agent,
+            ]),
+          )
         : {};
 
-    return attachAgentsToBriefs(briefs, { agentMap, taskContext });
+    return briefs.map((brief) => {
+      const agentIds = [
+        ...(brief.agentId ? [brief.agentId] : []),
+        ...(brief.taskId ? (taskContext.agentIdsByTaskId[brief.taskId] ?? []) : []),
+      ];
+
+      return {
+        ...brief,
+        agents: [...new Set(agentIds)]
+          .map((id) => agentMap[id])
+          .filter((agent): agent is AgentAvatarInfo => Boolean(agent)),
+        taskStatus: brief.taskId ? (taskContext.statusByTaskId[brief.taskId] ?? null) : null,
+      };
+    });
+  }
+
+  private collectReferenceIds(briefs: BriefItem[]): BriefReferenceIds {
+    return {
+      agentIds: briefs.map((brief) => brief.agentId).filter(isNonEmptyString),
+      taskIds: briefs.map((brief) => brief.taskId).filter(isNonEmptyString),
+    };
   }
 
   private async loadBriefTaskContext(taskIds: string[]): Promise<BriefTaskContext> {
-    if (taskIds.length === 0) return createEmptyBriefTaskContext();
+    if (taskIds.length === 0) {
+      return {
+        agentIds: [],
+        agentIdsByTaskId: {},
+        statusByTaskId: {},
+      };
+    }
 
     const [agentIdsByTaskId, taskRows] = await Promise.all([
       this.taskModel.getTreeAgentIdsForTaskIds(taskIds),
@@ -112,7 +101,7 @@ export class BriefService {
     ]);
 
     return {
-      agentIds: uniqueStrings(Object.values(agentIdsByTaskId).flat()),
+      agentIds: [...new Set(Object.values(agentIdsByTaskId).flat())],
       agentIdsByTaskId,
       statusByTaskId: Object.fromEntries(
         taskRows.map((task) => [task.id, (task.status as TaskStatus) ?? null]),

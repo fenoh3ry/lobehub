@@ -4,7 +4,7 @@ import type {
   ListManagedSkillsInput,
   ListRelevantMemoriesInput,
   ListTopicActivityInput,
-  NightlyReviewDependencies,
+  NightlyReviewReadAdapters,
 } from '../nightlyCollector';
 import { createNightlyReviewService } from '../nightlyCollector';
 
@@ -16,13 +16,13 @@ const REVIEW_INPUT = {
 };
 
 const createDeps = (
-  overrides: Partial<NightlyReviewDependencies> = {},
-): NightlyReviewDependencies => ({
+  overrides: Partial<NightlyReviewReadAdapters> = {},
+): NightlyReviewReadAdapters => ({
   listManagedSkills: vi
     .fn<
       (
         input: ListManagedSkillsInput,
-      ) => Promise<Awaited<ReturnType<NightlyReviewDependencies['listManagedSkills']>>>
+      ) => Promise<Awaited<ReturnType<NightlyReviewReadAdapters['listManagedSkills']>>>
     >()
     .mockResolvedValue([
       {
@@ -35,7 +35,7 @@ const createDeps = (
     .fn<
       (
         input: ListRelevantMemoriesInput,
-      ) => Promise<Awaited<ReturnType<NightlyReviewDependencies['listRelevantMemories']>>>
+      ) => Promise<Awaited<ReturnType<NightlyReviewReadAdapters['listRelevantMemories']>>>
     >()
     .mockResolvedValue([
       {
@@ -47,7 +47,7 @@ const createDeps = (
     .fn<
       (
         input: ListTopicActivityInput,
-      ) => Promise<Awaited<ReturnType<NightlyReviewDependencies['listTopicActivity']>>>
+      ) => Promise<Awaited<ReturnType<NightlyReviewReadAdapters['listTopicActivity']>>>
     >()
     .mockResolvedValue([]),
   ...overrides,

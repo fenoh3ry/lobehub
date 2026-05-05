@@ -2,8 +2,8 @@ import type { EvidenceRef } from './types';
 
 /** Shared fields for skill maintenance domain requests. */
 export interface SkillMaintenanceBaseInput {
-  /** Whether the target is readonly because it is builtin, marketplace, or otherwise immutable. */
-  readonly?: boolean;
+  /** Whether the resolved target is immutable because it is builtin, marketplace, or otherwise protected. */
+  targetReadonly?: boolean;
   /** User that owns the writable managed skill. */
   userId: string;
 }
@@ -79,20 +79,20 @@ export interface SkillMaintenanceResult {
   summary?: string;
 }
 
-/** Dependencies used by the skill maintenance service. */
-export interface SkillManagementServiceDependencies {
-  /** Adapter that consolidates managed skills through the existing skill stack. */
+/** Persistence adapters for managed skill maintenance operations. */
+export interface SkillMaintenanceAdapters {
+  /** Consolidates managed skills through the existing skill stack. */
   consolidateSkill?: (
     request: SkillMaintenanceConsolidateRequest,
   ) => Promise<SkillMaintenanceResult>;
-  /** Adapter that creates managed skills through the existing skill stack. */
+  /** Creates managed skills through the existing skill stack. */
   createSkill?: (request: SkillMaintenanceCreateRequest) => Promise<SkillMaintenanceResult>;
-  /** Adapter that refines managed skills through the existing skill stack. */
+  /** Refines managed skills through the existing skill stack. */
   refineSkill?: (request: SkillMaintenanceRefineRequest) => Promise<SkillMaintenanceResult>;
 }
 
-const assertWritableSkill = (readonly: boolean | undefined) => {
-  if (readonly) {
+const assertWritableSkill = (targetReadonly: boolean | undefined) => {
+  if (targetReadonly) {
     throw new Error('Skill target is readonly');
   }
 };
@@ -108,46 +108,44 @@ const assertApprovedConsolidation = (input: ConsolidateMaintenanceSkillInput) =>
  *
  * Use when:
  * - Maintenance executor needs one skill domain validation boundary
- * - Same-turn skill actions need to share readonly and consolidation guards
+ * - Same-turn skill actions need to share target immutability and consolidation guards
  *
  * Expects:
- * - Builtin and marketplace skills are marked readonly before mutation
+ * - Builtin and marketplace skills are marked `targetReadonly` before mutation
  * - Server callers inject adapters backed by the existing managed-skill stack
  *
  * Returns:
  * - A service that validates skill targets before delegating persistence
  */
-export const createSkillManagementService = (
-  dependencies: SkillManagementServiceDependencies = {},
-) => ({
+export const createSkillManagementService = (adapters: SkillMaintenanceAdapters = {}) => ({
   consolidateSkill: async (
     request: SkillMaintenanceConsolidateRequest,
   ): Promise<SkillMaintenanceResult> => {
-    assertWritableSkill(request.input.readonly);
+    assertWritableSkill(request.input.targetReadonly);
     assertApprovedConsolidation(request.input);
 
-    if (!dependencies.consolidateSkill) {
+    if (!adapters.consolidateSkill) {
       throw new Error('Skill consolidate adapter is required');
     }
 
-    return dependencies.consolidateSkill(request);
+    return adapters.consolidateSkill(request);
   },
   createSkill: async (request: SkillMaintenanceCreateRequest): Promise<SkillMaintenanceResult> => {
-    assertWritableSkill(request.input.readonly);
+    assertWritableSkill(request.input.targetReadonly);
 
-    if (!dependencies.createSkill) {
+    if (!adapters.createSkill) {
       throw new Error('Skill create adapter is required');
     }
 
-    return dependencies.createSkill(request);
+    return adapters.createSkill(request);
   },
   refineSkill: async (request: SkillMaintenanceRefineRequest): Promise<SkillMaintenanceResult> => {
-    assertWritableSkill(request.input.readonly);
+    assertWritableSkill(request.input.targetReadonly);
 
-    if (!dependencies.refineSkill) {
+    if (!adapters.refineSkill) {
       throw new Error('Skill refine adapter is required');
     }
 
-    return dependencies.refineSkill(request);
+    return adapters.refineSkill(request);
   },
 });

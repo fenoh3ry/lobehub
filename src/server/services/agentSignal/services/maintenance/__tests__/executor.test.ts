@@ -16,8 +16,8 @@ describe('maintenanceExecutorService', () => {
   it('executes auto-apply memory actions through the memory service', async () => {
     const writeMemory = vi.fn().mockResolvedValue({ memoryId: 'mem-1', summary: 'Saved.' });
     const executor = createMaintenanceExecutorService({
-      memoryService: { writeMemory },
-      skillService: {},
+      memory: { writeMemory },
+      skill: {},
     });
 
     const result = await executor.execute({
@@ -60,8 +60,8 @@ describe('maintenanceExecutorService', () => {
   it('records proposal-only actions without mutation', async () => {
     const writeMemory = vi.fn();
     const executor = createMaintenanceExecutorService({
-      memoryService: { writeMemory },
-      skillService: {},
+      memory: { writeMemory },
+      skill: {},
     });
 
     const result = await executor.execute({

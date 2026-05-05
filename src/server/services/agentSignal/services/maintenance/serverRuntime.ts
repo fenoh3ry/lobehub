@@ -1,5 +1,6 @@
 import { DEFAULT_MINI_SYSTEM_AGENT_ITEM } from '@lobechat/const';
-import type { GenerateObjectPayload, GenerateObjectSchema } from '@lobechat/model-runtime';
+import type { GenerateObjectSchema } from '@lobechat/model-runtime';
+import { createAgentSignalNightlyReviewMessages } from '@lobechat/prompts';
 import { RequestTrigger } from '@lobechat/types';
 import { z } from 'zod';
 
@@ -110,6 +111,7 @@ const NIGHTLY_REVIEW_AGENT_SCHEMA = {
                 memoryId: { type: 'string' },
                 skillDocumentId: { type: 'string' },
                 skillName: { type: 'string' },
+                targetReadonly: { type: 'boolean' },
                 taskIds: { items: { type: 'string' }, type: 'array' },
                 topicIds: { items: { type: 'string' }, type: 'array' },
               },
@@ -199,6 +201,7 @@ const MaintenanceActionDraftSchema = z.object({
       memoryId: z.string().optional(),
       skillDocumentId: z.string().optional(),
       skillName: z.string().optional(),
+      targetReadonly: z.boolean().optional(),
       taskIds: z.array(z.string()).optional(),
       topicIds: z.array(z.string()).optional(),
     })
@@ -225,25 +228,6 @@ const getStringField = (value: unknown, key: string) => {
   return typeof field === 'string' && field.trim().length > 0 ? field.trim() : undefined;
 };
 
-const toGenerateObjectMessages = (
-  context: NightlyReviewContext | SelfReflectionReviewContext,
-): GenerateObjectPayload['messages'] => [
-  {
-    content: [
-      'Review the bounded daily digest for one assistant. Return only safe maintenance actions.',
-      'Use noop for ordinary successful days. Non-noop actions must cite evidenceRefs from the digest.',
-      'Attach policyHints for every non-noop action: evidenceStrength, userExplicitness, sensitivity, persistence, and mutationScope when skill-related.',
-      'Auto-safe memory candidates must be explicit, stable, normal-sensitivity preferences or durable facts; inferred, temporal, sensitive, third-party, or ambiguous memory candidates should be proposal_only or noop.',
-      'Skill creation/refinement should be proposal_only unless the evidence shows explicit maintenance intent and a small targeted change. Consolidation should stay proposal_only.',
-    ].join(' '),
-    role: 'system',
-  },
-  {
-    content: JSON.stringify(context),
-    role: 'user',
-  },
-];
-
 const createSkillNameFromTitle = (title: string | undefined) =>
   (title ?? 'agent-signal-skill')
     .toLowerCase()
@@ -252,9 +236,9 @@ const createSkillNameFromTitle = (title: string | undefined) =>
     .slice(0, 48) || 'agent-signal-skill';
 
 /**
- * Options for creating server nightly review policy dependencies.
+ * Options for composing server maintenance policy handlers.
  */
-export interface CreateServerMaintenancePolicyDepsOptions {
+export interface CreateServerMaintenancePolicyOptions {
   /** Agent id from the workflow payload, used as an extra ownership check. */
   agentId?: string;
   /** Database bound to the current workflow worker. */
@@ -276,7 +260,7 @@ const createServerMaintenanceExecutor = (input: {
   userId: string;
 }) => {
   return createMaintenanceExecutorService({
-    memoryService: createMemoryMaintenanceService({
+    memory: createMemoryMaintenanceService({
       writeMemory: async ({ content, evidenceRefs, idempotencyKey }) => {
         const result = await runMemoryActionAgent(
           {
@@ -302,7 +286,7 @@ const createServerMaintenanceExecutor = (input: {
         };
       },
     }),
-    skillService: createSkillManagementService({
+    skill: createSkillManagementService({
       createSkill: async ({ input: skillInput }) => {
         const bodyMarkdown =
           getStringField(skillInput, 'bodyMarkdown') ?? getStringField(skillInput, 'content') ?? '';
@@ -368,7 +352,7 @@ const runServerMaintenanceReviewAgent = async (
   );
   const result = await modelRuntime.generateObject(
     {
-      messages: toGenerateObjectMessages(context),
+      messages: createAgentSignalNightlyReviewMessages(context),
       model: DEFAULT_MINI_SYSTEM_AGENT_ITEM.model,
       schema: NIGHTLY_REVIEW_AGENT_SCHEMA,
     },
@@ -417,7 +401,7 @@ const collectSelfReflectionContext = async (
 };
 
 /**
- * Creates server dependencies for the self-reflection source handler.
+ * Creates server runtime handlers for the self-reflection source handler.
  *
  * Use when:
  * - The Agent Signal workflow consumes `agent.self_reflection.requested`
@@ -428,14 +412,14 @@ const collectSelfReflectionContext = async (
  * - The handler will re-check gates and idempotency before reviewer work
  *
  * Returns:
- * - A complete self-reflection dependency bundle ready for `createDefaultAgentSignalPolicies`
+ * - Self-reflection handler options ready for `createDefaultAgentSignalPolicies`
  */
-export const createServerSelfReflectionPolicyDeps = ({
+export const createServerSelfReflectionPolicyOptions = ({
   agentId,
   db,
   selfIterationEnabled = false,
   userId,
-}: CreateServerMaintenancePolicyDepsOptions): CreateSelfReflectionSourceHandlerDependencies => {
+}: CreateServerMaintenancePolicyOptions): CreateSelfReflectionSourceHandlerDependencies => {
   const planner = createMaintenancePlannerService();
   const reviewContextModel = new AgentSignalReviewContextModel(db, userId);
   const skillDocumentService = new SkillManagementDocumentService(db, userId);
@@ -472,7 +456,7 @@ export const createServerSelfReflectionPolicyDeps = ({
 };
 
 /**
- * Creates server dependencies for the agent-declared self-iteration intent source handler.
+ * Creates server runtime handlers for the agent-declared self-iteration intent source handler.
  *
  * Use when:
  * - The Agent Signal workflow consumes `agent.self_iteration_intent.declared`
@@ -483,14 +467,14 @@ export const createServerSelfReflectionPolicyDeps = ({
  * - The handler will re-check gates and idempotency before execution
  *
  * Returns:
- * - A complete self-iteration intent dependency bundle ready for `createDefaultAgentSignalPolicies`
+ * - Self-iteration intent handler options ready for `createDefaultAgentSignalPolicies`
  */
-export const createServerSelfIterationIntentPolicyDeps = ({
+export const createServerSelfIterationIntentPolicyOptions = ({
   agentId,
   db,
   selfIterationEnabled = false,
   userId,
-}: CreateServerMaintenancePolicyDepsOptions): CreateSelfIterationIntentSourceHandlerDependencies => {
+}: CreateServerMaintenancePolicyOptions): CreateSelfIterationIntentSourceHandlerDependencies => {
   const planner = createMaintenancePlannerService();
   const reviewContextModel = new AgentSignalReviewContextModel(db, userId);
   const skillDocumentService = new SkillManagementDocumentService(db, userId);
@@ -533,7 +517,7 @@ export const createServerSelfIterationIntentPolicyDeps = ({
 };
 
 /**
- * Creates server procedure policy dependencies with fast-loop self-reflection enabled.
+ * Creates server procedure policy options with fast-loop self-reflection enabled.
  *
  * Use when:
  * - Workflow-owned Agent Signal runtimes process tool outcome sources
@@ -551,7 +535,7 @@ export const createServerProcedurePolicyOptions = ({
   db,
   selfIterationEnabled = false,
   userId,
-}: CreateServerMaintenancePolicyDepsOptions) => {
+}: CreateServerMaintenancePolicyOptions) => {
   const reviewContextModel = new AgentSignalReviewContextModel(db, userId);
 
   return createProcedurePolicyOptions({
@@ -590,25 +574,25 @@ export const createServerProcedurePolicyOptions = ({
 };
 
 /**
- * Creates server dependencies for the nightly review source handler.
+ * Creates server runtime handlers for the nightly review source handler.
  *
  * Use when:
  * - The Agent Signal workflow consumes `agent.nightly_review.requested`
- * - Runtime policy composition needs collector, reviewer, planner, executor, receipt, and brief deps
+ * - Runtime policy composition needs collection, review, planning, execution, receipts, and brief writing
  *
  * Expects:
  * - The scheduler has already emitted a stable nightly source id
  * - The handler will re-check feature gates and idempotency before reviewer work
  *
  * Returns:
- * - A complete nightly review dependency bundle ready for `createDefaultAgentSignalPolicies`
+ * - Nightly review handler options ready for `createDefaultAgentSignalPolicies`
  */
-export const createServerNightlyReviewPolicyDeps = ({
+export const createServerNightlyReviewPolicyOptions = ({
   agentId,
   db,
   selfIterationEnabled = false,
   userId,
-}: CreateServerMaintenancePolicyDepsOptions): CreateNightlyReviewSourceHandlerDependencies => {
+}: CreateServerMaintenancePolicyOptions): CreateNightlyReviewSourceHandlerDependencies => {
   const planner = createMaintenancePlannerService();
   const nightlyReviewModel = new AgentSignalNightlyReviewModel(db);
   const reviewContextModel = new AgentSignalReviewContextModel(db, userId);

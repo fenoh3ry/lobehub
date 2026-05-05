@@ -35,9 +35,9 @@ export interface MemoryMaintenanceWriteResult {
   summary?: string;
 }
 
-/** Dependencies used by the memory maintenance service. */
-export interface MemoryMaintenanceServiceDependencies {
-  /** Adapter that writes memory through the existing memory extraction/persistence stack. */
+/** Persistence adapter for maintenance memory writes. */
+export interface MemoryMaintenanceWriter {
+  /** Writes memory through the existing memory extraction/persistence stack. */
   writeMemory?: (input: {
     content: string;
     evidenceRefs: EvidenceRef[];
@@ -93,19 +93,17 @@ const assertSafeAutomaticMemory = (content: string) => {
  * Returns:
  * - A service that validates automatic memory candidates before delegating persistence
  */
-export const createMemoryMaintenanceService = (
-  dependencies: MemoryMaintenanceServiceDependencies = {},
-) => ({
+export const createMemoryMaintenanceService = (writer: MemoryMaintenanceWriter = {}) => ({
   writeMemory: async (
     request: MemoryMaintenanceWriteRequest,
   ): Promise<MemoryMaintenanceWriteResult> => {
     assertSafeAutomaticMemory(request.input.content);
 
-    if (!dependencies.writeMemory) {
+    if (!writer.writeMemory) {
       throw new Error('Memory write adapter is required');
     }
 
-    return dependencies.writeMemory({
+    return writer.writeMemory({
       content: request.input.content,
       evidenceRefs: request.evidenceRefs,
       idempotencyKey: request.idempotencyKey,

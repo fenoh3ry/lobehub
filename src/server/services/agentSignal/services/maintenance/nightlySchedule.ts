@@ -63,8 +63,8 @@ export interface ListNightlyReviewAgentTargetsInput {
   windowStart: Date;
 }
 
-/** Dependencies used by the pure nightly review scheduler service. */
-export interface NightlyReviewScheduleDependencies {
+/** Queue and read adapters used by the pure nightly review scheduler service. */
+export interface NightlyReviewScheduleAdapters {
   /**
    * Enqueues one AgentSignal source event for later handler execution.
    *
@@ -113,7 +113,7 @@ export interface NightlyReviewScheduleService {
    * - Cron should only produce source events and leave review execution to AgentSignal handlers
    *
    * Expects:
-   * - Dependencies return users and targets without side effects except `enqueueSource`
+   * - Adapters return users and targets without side effects except `enqueueSource`
    * - `now` is a UTC instant shared by all users in the pass
    *
    * Returns:
@@ -159,10 +159,10 @@ const getLocalNightWindow = (now: Date, timezone: string | null | undefined): Lo
 };
 
 /**
- * Creates a pure nightly review scheduler service from injected boundaries.
+ * Creates a pure nightly review scheduler service from queue and read adapters.
  *
  * Use when:
- * - Tests need deterministic time and mocked storage/queue dependencies
+ * - Tests need deterministic time and mocked storage/queue adapters
  * - Server code needs a cron-safe service that emits only AgentSignal sources
  *
  * Expects:
@@ -173,12 +173,12 @@ const getLocalNightWindow = (now: Date, timezone: string | null | undefined): Lo
  * - A scheduler service with one dispatch method
  */
 export const createNightlyReviewScheduleService = (
-  deps: NightlyReviewScheduleDependencies,
+  adapters: NightlyReviewScheduleAdapters,
 ): NightlyReviewScheduleService => {
   return {
     dispatchNightlyReviewRequests: async (options = {}) => {
-      const now = deps.now?.() ?? new Date();
-      const users = await deps.listEligibleUsers({
+      const now = adapters.now?.() ?? new Date();
+      const users = await adapters.listEligibleUsers({
         cursor: options.cursor,
         limit: options.limit,
         whitelist: options.whitelist,
@@ -194,7 +194,7 @@ export const createNightlyReviewScheduleService = (
           continue;
         }
 
-        const targets = await deps.listActiveAgentTargets({
+        const targets = await adapters.listActiveAgentTargets({
           limit: options.targetLimit,
           userId: user.id,
           windowEnd: now,
@@ -202,7 +202,7 @@ export const createNightlyReviewScheduleService = (
         });
 
         for (const target of targets) {
-          await deps.enqueueSource({
+          await adapters.enqueueSource({
             payload: {
               agentId: target.agentId,
               localDate: localWindow.localDate,

@@ -32,17 +32,31 @@ export interface CreateDefaultAgentSignalPoliciesOptions extends CreateFeedbackD
   userMemory?: UserMemoryActionHandlerOptions;
 }
 
+type DefaultAgentSignalPolicyFactory = (
+  options: CreateDefaultAgentSignalPoliciesOptions,
+) => AgentSignalMiddleware[];
+
+const DEFAULT_AGENT_SIGNAL_POLICY_FACTORIES: DefaultAgentSignalPolicyFactory[] = [
+  (options) => [createAnalyzeIntentPolicy(options)],
+  (options) =>
+    createReviewNightlyPolicy({
+      nightlyReview: options.nightlyReview,
+      selfIterationIntent: options.selfIterationIntent,
+      selfReflection: options.selfReflection,
+    }),
+];
+
 /**
  * Creates the default Agent Signal policy stack with optional maintenance source handlers.
  *
  * Use when:
  * - Runtime creation needs the standard analyze-intent policies
  * - Callers want to opt into nightly, self-reflection, or self-iteration maintenance handlers
- *   via DI
+ *   with explicit handler options
  *
  * Expects:
- * - Optional maintenance dependencies are complete bundles for their source handlers
- * - Missing optional dependencies mean the corresponding source handler is not installed
+ * - Optional maintenance options are complete bundles for their source handlers
+ * - Missing optional options mean the corresponding source handler is not installed
  *
  * Returns:
  * - Middleware list that installs analyze-intent policies and enabled source handlers
@@ -50,12 +64,5 @@ export interface CreateDefaultAgentSignalPoliciesOptions extends CreateFeedbackD
 export const createDefaultAgentSignalPolicies = (
   options: CreateDefaultAgentSignalPoliciesOptions = {},
 ): AgentSignalMiddleware[] => {
-  return [
-    createAnalyzeIntentPolicy(options),
-    ...createReviewNightlyPolicy({
-      nightlyReview: options.nightlyReview,
-      selfIterationIntent: options.selfIterationIntent,
-      selfReflection: options.selfReflection,
-    }),
-  ];
+  return DEFAULT_AGENT_SIGNAL_POLICY_FACTORIES.flatMap((createPolicy) => createPolicy(options));
 };

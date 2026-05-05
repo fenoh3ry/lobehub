@@ -104,6 +104,7 @@ export interface MaintenanceActionTarget {
   memoryId?: string;
   skillDocumentId?: string;
   skillName?: string;
+  targetReadonly?: boolean;
   taskIds?: string[];
   topicIds?: string[];
 }

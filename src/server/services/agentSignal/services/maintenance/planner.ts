@@ -76,10 +76,13 @@ const getStringArrayField = (value: unknown, key: string) => {
 };
 
 const getReadonlyField = (value: unknown) => {
-  const field = getRecordField(value, 'readonly');
+  const field = getRecordField(value, 'targetReadonly') ?? getRecordField(value, 'readonly');
 
   return typeof field === 'boolean' ? field : undefined;
 };
+
+const getTargetReadonly = (draft: MaintenanceActionDraft) =>
+  draft.target?.targetReadonly ?? getReadonlyField(draft.value);
 
 const createOperation = (
   draft: MaintenanceActionDraft,
@@ -105,7 +108,7 @@ const createOperation = (
           getStringField(draft.value, 'bodyMarkdown') ?? getStringField(draft.value, 'content'),
         description: getStringField(draft.value, 'description'),
         name: getStringField(draft.value, 'name'),
-        readonly: getReadonlyField(draft.value),
+        targetReadonly: getTargetReadonly(draft),
         title: getStringField(draft.value, 'title'),
         userId: request.userId,
       },
@@ -126,7 +129,7 @@ const createOperation = (
           getStringField(draft.value, 'patch') ??
           getStringField(draft.value, 'bodyMarkdown') ??
           getStringField(draft.value, 'content'),
-        readonly: getReadonlyField(draft.value),
+        targetReadonly: getTargetReadonly(draft),
         skillDocumentId,
         userId: request.userId,
       },
@@ -145,7 +148,7 @@ const createOperation = (
       domain: 'skill',
       input: {
         canonicalSkillDocumentId,
-        readonly: getReadonlyField(draft.value),
+        targetReadonly: getTargetReadonly(draft),
         sourceSkillIds,
         userId: request.userId,
       },
@@ -156,13 +159,7 @@ const createOperation = (
   return undefined;
 };
 
-const isReadonlyDraftTarget = (draft: MaintenanceActionDraft) =>
-  Boolean(
-    draft.value &&
-    typeof draft.value === 'object' &&
-    'readonly' in draft.value &&
-    draft.value.readonly,
-  );
+const isReadonlyDraftTarget = (draft: MaintenanceActionDraft) => Boolean(getTargetReadonly(draft));
 
 const classifyMemoryPlan = (
   draft: MaintenanceActionDraft,

@@ -92,10 +92,10 @@ const buildRuntimeOrchestrationResult = (
 };
 
 /**
- * Adds server defaults to optional Agent Signal maintenance policy dependencies.
+ * Adds server defaults to optional Agent Signal maintenance policy options.
  *
  * Use when:
- * - A caller already installed nightly review dependencies but omitted the brief writer
+ * - A caller already installed nightly review options but omitted the brief writer
  * - Nightly review outcomes should persist eligible Daily Brief rows in the server runtime
  *
  * Expects:

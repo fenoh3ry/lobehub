@@ -1,4 +1,4 @@
-import type { AgentSignalMiddleware } from '../../runtime/middleware';
+import type { AgentSignalHandlerDefinition, AgentSignalMiddleware } from '../../runtime/middleware';
 import { defineAgentSignalHandlers } from '../../runtime/middleware';
 import type { CreateNightlyReviewSourceHandlerDependencies } from './nightlyReview';
 import { createNightlyReviewSourcePolicyHandler } from './nightlyReview';
@@ -7,15 +7,20 @@ import { createSelfIterationIntentSourcePolicyHandler } from './selfIterationInt
 import type { CreateSelfReflectionSourceHandlerDependencies } from './selfReflection';
 import { createSelfReflectionSourcePolicyHandler } from './selfReflection';
 
+const createOptionalSourceHandler = <TOptions>(
+  options: TOptions | undefined,
+  create: (options: TOptions) => AgentSignalHandlerDefinition,
+) => (options ? [create(options)] : []);
+
 /**
  * Options for composing review-nightly maintenance source handlers.
  */
 export interface CreateReviewNightlyPolicyOptions {
-  /** Optional nightly review source handler dependencies. */
+  /** Optional nightly review source handler options. */
   nightlyReview?: CreateNightlyReviewSourceHandlerDependencies;
-  /** Optional self-iteration intent source handler dependencies. */
+  /** Optional self-iteration intent source handler options. */
   selfIterationIntent?: CreateSelfIterationIntentSourceHandlerDependencies;
-  /** Optional self-reflection source handler dependencies. */
+  /** Optional self-reflection source handler options. */
   selfReflection?: CreateSelfReflectionSourceHandlerDependencies;
 }
 
@@ -27,7 +32,7 @@ export interface CreateReviewNightlyPolicyOptions {
  * - Runtime creation wants self-reflection or self-iteration intent handlers in the same domain
  *
  * Expects:
- * - Each optional dependency bundle is complete for its corresponding source handler
+ * - Each optional handler option bundle is complete for its corresponding source handler
  * - Missing optional bundles mean that source handler is intentionally not installed
  *
  * Returns:
@@ -37,15 +42,12 @@ export const createReviewNightlyPolicy = (
   options: CreateReviewNightlyPolicyOptions = {},
 ): AgentSignalMiddleware[] => {
   const handlers = [
-    ...(options.nightlyReview
-      ? [createNightlyReviewSourcePolicyHandler(options.nightlyReview)]
-      : []),
-    ...(options.selfReflection
-      ? [createSelfReflectionSourcePolicyHandler(options.selfReflection)]
-      : []),
-    ...(options.selfIterationIntent
-      ? [createSelfIterationIntentSourcePolicyHandler(options.selfIterationIntent)]
-      : []),
+    ...createOptionalSourceHandler(options.nightlyReview, createNightlyReviewSourcePolicyHandler),
+    ...createOptionalSourceHandler(options.selfReflection, createSelfReflectionSourcePolicyHandler),
+    ...createOptionalSourceHandler(
+      options.selfIterationIntent,
+      createSelfIterationIntentSourcePolicyHandler,
+    ),
   ];
 
   return handlers.length > 0 ? [defineAgentSignalHandlers(handlers)] : [];
