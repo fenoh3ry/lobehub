@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@lobechat/agent-gateway-client": "workspace:*",
-    "@lobehub/icons": "^5.4.0",
+    "@lobehub/icons": "^5.6.0",
     "diff": "^8.0.4"
   },
   "devDependencies": {
