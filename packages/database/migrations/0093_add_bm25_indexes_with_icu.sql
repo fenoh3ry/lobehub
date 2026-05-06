@@ -1,4 +1,18 @@
 -- Custom SQL migration file, put your code below! --
+-- BM25 indexes require pg_search extension (deprecated on Neon).
+-- Gracefully skip if bm25 access method is not available.
+DO $$ BEGIN
+  -- Test if bm25 access method exists
+  PERFORM 1 FROM pg_am WHERE amname = 'bm25';
+  IF NOT FOUND THEN
+    RAISE NOTICE 'BM25 (pg_search) not available, skipping all BM25 index creation';
+    RETURN;
+  END IF;
+EXCEPTION WHEN others THEN
+  RAISE NOTICE 'Cannot check/create BM25 indexes, skipping (%)', SQLERRM;
+  RETURN;
+END $$;
+
 -- All tables include user_id (keyword tokenizer + fast) for filter pushdown into tantivy index scan.
 -- Enum/filter fields (type, status, role, etc.) use keyword+fast for the same reason.
 -- Large tables (documents, messages) are placed last to avoid blocking smaller index builds.
